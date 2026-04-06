@@ -1,1 +1,1 @@
-{"admin@gmail.com": {"password": "123", "photo": "avatars/admin@gmail.com.jpg"}, "b2@gmail.com": {"password": "123", "photo": "avatars/b2@gmail.com.jpg"}}
+{"admin@gmail.com": {"password": "123", "photo": "avatars/admin@gmail.com.jpg", "stats": {"games": 0, "wins": 0, "draws": 0, "losses": 0}}, "b2@gmail.com": {"password": "123", "photo": "avatars/b2@gmail.com.jpg", "stats": {"games": 1, "wins": 0, "draws": 0, "losses": 1}}, "b1@gmail.com": {"password": "123", "photo": "avatars/b1@gmail.com.jpg", "stats": {"games": 1, "wins": 1, "draws": 0, "losses": 0}}}

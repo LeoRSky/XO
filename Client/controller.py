@@ -71,14 +71,34 @@ class GameController:
                 self.admin.write(f"Игроков: {p}, Игр: {g}")
         elif msg.startswith("USERS"):
             if hasattr(self, "admin"):
-                users = msg.split(" ", 1)[1]
-                self.admin.write(users.replace(";", "\n"))
+                users = msg.split(" ", 1)[1].split(";")
+                self.admin.set_users(users)
+                self.admin.write("Пользователи загружены")
         elif msg == "DELETE_OK":
             if hasattr(self, "admin"):
                 self.admin.write("Удалено")
         elif msg == "STOP_OK":
             if hasattr(self, "admin"):
                 self.admin.write("Игры остановлены")
+        elif msg.startswith("USER_STATS"):
+            if hasattr(self, "admin"):
+                _, games, wins, draws, losses = msg.split()
+                self.admin.write(f"Игр: {games}, Побед: {wins}, Ничьих: {draws}, Поражений: {losses}")
+        elif msg.startswith("GAMES"):
+            if hasattr(self, "admin"):
+                games_str = msg.split(" ", 1)[1]
+                games = games_str.split(";") if games_str else []
+                games_list = []
+                for i in range(0, len(games), 4):
+                    if i+3 < len(games):
+                        gid, u1, u2, res = games[i:i+4]
+                        games_list.append(f"Игра {gid}: {u1} vs {u2} - {res}")
+                self.admin.set_games(games_list)
+                self.admin.write("История игр загружена")
+        elif msg.startswith("GAME_HISTORY"):
+            if hasattr(self, "admin"):
+                moves = msg.split(" ", 1)[1]
+                self.admin.write(f"Ходы: {moves}")
 
     def update_board(self, st):
         cells = st.split(",")

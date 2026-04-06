@@ -8,13 +8,20 @@ IP = "127.0.0.1"
 PORT = 5001
 USERS_FILE = "users.json"
 all_games = []
+finished_games = []
 lock = threading.Lock()
 
 def load_users():
     if not os.path.exists(USERS_FILE):
         return {}
     with open(USERS_FILE, "r") as f:
-        return json.load(f)
+        users = json.load(f)
+    # Add stats if not present
+    for email, data in users.items():
+        if "stats" not in data:
+            data["stats"] = {"games": 0, "wins": 0, "draws": 0, "losses": 0}
+    save_users(users)
+    return users
 
 def save_users(users):
     with open(USERS_FILE, "w") as f:
@@ -26,9 +33,11 @@ class Game:
     def __init__(self):
         self.board = [[" "]*3 for _ in range(3)]
         self.players = []
+        self.users = []
         self.symbols = ["X","O"]
         self.turn = 0
         self.running = True
+        self.moves = []
 
 def winner(board, sym):
     for i in range(3):
@@ -108,7 +117,7 @@ def auth_conn(conn):
                     except:
                         conn.sendall("ERROR Photo failed\n".encode())
 
-def player_loop(game, conn, pid):
+def player_loop(game, conn, pid, user):
     try: conn.sendall(f"SYMBOL {game.symbols[pid]}\n".encode())
     except: conn.close(); return
 
@@ -130,9 +139,21 @@ def player_loop(game, conn, pid):
 
                 if pid==game.turn and game.board[r][c]==" ":
                     game.board[r][c] = game.symbols[pid]
+                    game.moves.append((r, c))  # Add the move to the game's move list
                     send_board(game)
 
                     if winner(game.board, game.symbols[pid]):
+                        # Update stats
+                        winner_user = game.users[pid]
+                        loser_user = game.users[1 - pid]
+                        users[winner_user]["stats"]["wins"] += 1
+                        users[winner_user]["stats"]["games"] += 1
+                        users[loser_user]["stats"]["losses"] += 1
+                        users[loser_user]["stats"]["games"] += 1
+                        save_users(users)
+                        # Add to finished games
+                        with lock:
+                            finished_games.append(game)
                         for pl in game.players:
                             try: pl.sendall("WIN\n".encode())
                             except: pass
@@ -140,6 +161,14 @@ def player_loop(game, conn, pid):
                         break
 
                     if full_board(game.board):
+                        # Update stats for draw
+                        for u in game.users:
+                            users[u]["stats"]["draws"] += 1
+                            users[u]["stats"]["games"] += 1
+                        save_users(users)
+                        # Add to finished games
+                        with lock:
+                            finished_games.append(game)
                         for pl in game.players:
                             try: pl.sendall("DRAW\n".encode())
                             except: pass
@@ -185,6 +214,29 @@ def admin_loop(conn):
                 elif parts[0] == "ADMIN_STOP":
                     stop_games()
                     conn.sendall("STOP_OK\n".encode())
+                elif parts[0] == "ADMIN_USER_STATS":
+                    email = parts[1]
+                    if email in users:
+                        stats = users[email]["stats"]
+                        conn.sendall(f"USER_STATS {stats['games']} {stats['wins']} {stats['draws']} {stats['losses']}\n".encode())
+                    else:
+                        conn.sendall("ERROR User not found\n".encode())
+                elif parts[0] == "ADMIN_GAMES":
+                    games_list = []
+                    with lock:
+                        for i, g in enumerate(finished_games):
+                            result = "DRAW" if full_board(g.board) else ("WIN" if winner(g.board, g.symbols[0]) else "WIN")  # approximate
+                            games_list.append(f"{i};{g.users[0]};{g.users[1]};{result}")
+                    conn.sendall(f"GAMES {';'.join(games_list)}\n".encode())
+                elif parts[0] == "ADMIN_GAME_HISTORY":
+                    gid = int(parts[1])
+                    with lock:
+                        if 0 <= gid < len(finished_games):
+                            g = finished_games[gid]
+                            moves_str = ";".join(f"{r},{c}" for r, c in g.moves)
+                            conn.sendall(f"GAME_HISTORY {moves_str}\n".encode())
+                        else:
+                            conn.sendall("ERROR Game not found\n".encode())
     finally:
         conn.close()
         if conn in active_connections:
@@ -215,6 +267,7 @@ def run_server():
 
         pid = len(g.players)
         g.players.append(conn)
+        g.users.append(user)
 
         if len(g.players)==1:
             conn.sendall("WAIT\n".encode())
@@ -222,6 +275,6 @@ def run_server():
             for pl in g.players:
                 pl.sendall("START\n".encode())
 
-        threading.Thread(target=player_loop, args=(g,conn,pid), daemon=True).start()
+        threading.Thread(target=player_loop, args=(g,conn,pid,user), daemon=True).start()
 
 run_server()
