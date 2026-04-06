@@ -4,6 +4,7 @@ from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk
 from model import GameModel
 from view import GameView
+from admin_view import AdminView
 
 class GameController:
     def __init__(self, root):
@@ -37,13 +38,19 @@ class GameController:
                 msg, buf = buf.split("\n",1)
                 self.handle_msg(msg)
 
+    def open_admin(self):
+        self.admin = AdminView(self.view.root, self.model.send)
+
     def handle_msg(self, msg):
         if msg.startswith("ERROR"):
             self.view.root.after(0, lambda: messagebox.showerror("Ошибка", msg))
         elif msg=="OK":
             self.view.root.after(0, lambda: messagebox.showinfo("Успех","Регистрация ок"))
-        elif msg=="SUCCESS":
-            self.pick_photo()
+        elif msg == "SUCCESS":
+            if self.model.email == "admin@gmail.com":
+                self.view.root.after(0, self.open_admin)
+            else:
+                self.pick_photo()
         elif msg=="PHOTO_OK":
             self.game_ui()
         elif msg.startswith("SYMBOL"):
@@ -58,6 +65,20 @@ class GameController:
             self.view.root.after(0, lambda: messagebox.showinfo("Игра","Ничья"))
         elif msg=="OPP_LEFT":
             self.view.root.after(0, lambda: messagebox.showinfo("Игра","Противник вышел"))
+        elif msg.startswith("STATS"):
+            if hasattr(self, "admin"):
+                _, p, g = msg.split()
+                self.admin.write(f"Игроков: {p}, Игр: {g}")
+        elif msg.startswith("USERS"):
+            if hasattr(self, "admin"):
+                users = msg.split(" ", 1)[1]
+                self.admin.write(users.replace(";", "\n"))
+        elif msg == "DELETE_OK":
+            if hasattr(self, "admin"):
+                self.admin.write("Удалено")
+        elif msg == "STOP_OK":
+            if hasattr(self, "admin"):
+                self.admin.write("Игры остановлены")
 
     def update_board(self, st):
         cells = st.split(",")
@@ -73,7 +94,11 @@ class GameController:
             return self.pick_photo()
         with open(path,"rb") as f:
             d = f.read()
-        self.model.send_photo(d)
+        try:
+            self.model.send_photo(d)
+        except:
+            messagebox.showerror("Ошибка", "Не удалось отправить фото, соединение разорвано")
+            return
         im = Image.open(path).resize((80,80))
         self.model.pic_avatar = ImageTk.PhotoImage(im)
 
